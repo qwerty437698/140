@@ -1,0 +1,62 @@
+from google.colab import files
+files.upload()
+
+!chmod 600 kaggle.json
+
+
+!kaggle datasets download -d gspmoreira/articles-sharing-reading-from-cit-deskdrop
+
+
+!unzip articles-sharing-reading-from-cit-deskdrop.zip
+
+
+!ls
+
+import pandas as pd
+df_articles = pd.read_csv('shared_articles.csv')
+df_interactions = pd.read_csv('users_interactions.csv')
+
+
+print("Articles DataFrame:")
+print(df_articles.head())
+
+print("\nInteractions DataFrame:")
+print(df_interactions.head())
+
+
+df_articles = df_articles[df_articles['eventType'] == 'CONTENT SHARED']
+
+
+total_events = df_interactions.groupby('contentId')['eventType'].count().reset_index()
+total_events.columns = ['contentId', 'total_events']
+df_articles = pd.merge(df_articles, total_events, on='contentId', how='left')
+df_articles['total_events'].fillna(0, inplace=True)
+
+df_articles = df_articles.sort_values(by='total_events', ascending=False)
+
+
+top_10_articles = df_articles.head(10)
+
+df_articles['title'] = df_articles['title'].str.lower()
+
+from sklearn.feature_extraction.text import CountVectorizer
+cv = CountVectorizer(stop_words='english')
+count_matrix = cv.fit_transform(df_articles['title'])
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+cosine_sim = cosine_similarity(count_matrix, count_matrix)
+
+df_articles = df_articles.set_index('contentId')
+
+def get_recommendations(contentId):
+    idx = df_articles.index.get_loc(contentId)
+    sim_scores = list(enumerate(cosine_sim[idx]))
+    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sim_scores[1:11]
+    article_indices = [i[0] for i in sim_scores]
+    return df_articles.index[article_indices]
+
+recommended_articles = get_recommendations(123456) 
+print("\nRecommended Articles:")
+print(df_articles.loc[recommended_articles])
